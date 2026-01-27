@@ -814,8 +814,7 @@ function drawNetworkVisualization() {
     const width = canvas.width;
     const height = canvas.height;
 
-    // Warm parchment background
-    ctx.fillStyle = '#dfd3b8';
+    ctx.fillStyle = '#e8dece';
     ctx.fillRect(0, 0, width, height);
 
     const net = state.curiosityNet;
@@ -919,8 +918,7 @@ function drawArchiveVisualization() {
     const width = canvas.width;
     const height = canvas.height;
 
-    // Warm parchment background
-    ctx.fillStyle = '#dfd3b8';
+    ctx.fillStyle = '#e8dece';
     ctx.fillRect(0, 0, width, height);
 
     const data = state.noveltyArchive.getVisualizationData();
@@ -1372,6 +1370,37 @@ document.addEventListener('DOMContentLoaded', async () => {
             toggleHeart();
         }
     });
+
+    // Sidebar toggle logic
+    const mainContainer = document.getElementById('main-container');
+    const toggleLeft = document.getElementById('toggle-left');
+    const toggleRight = document.getElementById('toggle-right');
+
+    function updateToggleLabels() {
+        const leftCollapsed = mainContainer.classList.contains('left-collapsed');
+        const rightCollapsed = mainContainer.classList.contains('right-collapsed');
+        toggleLeft.innerHTML = leftCollapsed ? '&rsaquo;' : '&lsaquo;';
+        toggleRight.innerHTML = rightCollapsed ? '&lsaquo;' : '&rsaquo;';
+    }
+
+    toggleLeft.onclick = () => {
+        mainContainer.classList.toggle('left-collapsed');
+        updateToggleLabels();
+        // Redraw canvases after transition completes
+        setTimeout(() => {
+            drawNetworkVisualization();
+            drawArchiveVisualization();
+        }, 320);
+    };
+
+    toggleRight.onclick = () => {
+        mainContainer.classList.toggle('right-collapsed');
+        updateToggleLabels();
+        setTimeout(() => {
+            drawNetworkVisualization();
+            drawArchiveVisualization();
+        }, 320);
+    };
 
     drawNetworkVisualization();
     drawArchiveVisualization();
