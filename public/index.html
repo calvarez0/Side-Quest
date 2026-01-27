@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Side Quest - A Curiosity Journey</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="logo">Side Quest <span>A Curiosity Journey</span></div>
+        <div class="header-stats">
+            <div class="stat">
+                <span class="stat-label">Depth</span>
+                <span class="stat-value" id="depth-counter">0</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Hearted</span>
+                <span class="stat-value" id="heart-counter">0</span>
+            </div>
+            <div class="connection-status">
+                <div class="status-dot" id="status-dot"></div>
+                <span id="status-text">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Left Sidebar - Journey Log -->
+        <aside class="sidebar-left">
+            <div class="sidebar-title">Journey Log</div>
+            <canvas class="archive-canvas" id="archive-canvas"></canvas>
+            <div class="archive-stats">
+                <div class="archive-stat">
+                    <span class="archive-stat-label">Discoveries</span>
+                    <span class="archive-stat-value" id="archive-size">0</span>
+                </div>
+                <div class="archive-stat">
+                    <span class="archive-stat-label">Treasures</span>
+                    <span class="archive-stat-value" id="frontiers-found">0</span>
+                </div>
+            </div>
+            <div class="trajectory-list" id="trajectory-list">
+                <!-- Populated dynamically -->
+            </div>
+            <div class="action-buttons">
+                <button class="action-btn" id="restart-btn">New Quest</button>
+                <button class="action-btn" id="export-btn">Export</button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content-center">
+            <div class="content-wrapper" id="content-area">
+                <!-- Start Screen -->
+                <div class="start-screen" id="start-screen">
+                    <div class="start-emblem">&#9733;</div>
+                    <h1 class="start-title">Side Quest</h1>
+                    <p class="start-subtitle">
+                        Every great adventure begins with a single question. Choose a path below, and let your curiosity lead the way.
+                    </p>
+                    <div class="seed-options" id="seed-options">
+                        <div class="seed-option" data-seed="Why are pineapples spiky?">
+                            <span class="seed-icon">&#127821;</span>
+                            Why are pineapples spiky?
+                        </div>
+                        <div class="seed-option" data-seed="How do I know I'm really me?">
+                            <span class="seed-icon">&#129300;</span>
+                            How do I know I'm really me?
+                        </div>
+                        <div class="seed-option" data-seed="Where does yesterday go?">
+                            <span class="seed-icon">&#9202;</span>
+                            Where does yesterday go?
+                        </div>
+                        <div class="seed-option" data-seed="Who was the coolest designer?">
+                            <span class="seed-icon">&#127912;</span>
+                            Who was the coolest designer?
+                        </div>
+                        <div class="seed-option" data-seed="Which civilization lasted the longest?">
+                            <span class="seed-icon">&#127984;</span>
+                            Which civilization lasted the longest?
+                        </div>
+                        <div class="seed-option" data-seed="Why does the universe feel personal sometimes?">
+                            <span class="seed-icon">&#10024;</span>
+                            Why does the universe feel personal sometimes?
+                        </div>
+                    </div>
+                    <div class="custom-question">
+                        <input type="text" class="custom-input" id="seed-input"
+                               placeholder="Or begin your own quest...">
+                        <button class="submit-btn" id="seed-submit">Embark</button>
+                    </div>
+                </div>
+
+                <!-- Exploration View (hidden initially) -->
+                <div id="exploration-view" style="display: none;">
+                    <div class="current-context" id="current-context">
+                        <div class="context-question" id="current-question"></div>
+                        <div class="context-answer" id="current-answer">
+                            <button class="heart-btn" id="heart-btn" title="Heart this insight">
+                                <span class="heart-icon">&#9825;</span>
+                            </button>
+                            <span id="answer-text"></span>
+                        </div>
+                    </div>
+
+                    <div class="question-options" id="question-options">
+                        <!-- Generated question options appear here -->
+                    </div>
+
+                    <div class="custom-question">
+                        <input type="text" class="custom-input" id="custom-input"
+                               placeholder="Or forge your own path...">
+                        <button class="submit-btn" id="custom-submit">Ask</button>
+                    </div>
+
+                    <div class="keyboard-hint">
+                        Press <kbd>1</kbd>-<kbd>5</kbd> to choose, <kbd>H</kbd> to heart, <kbd>Enter</kbd> to ask
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div class="loading" id="loading" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <span>Consulting the archives...</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar - CuriosityNet Visualization -->
+        <aside class="sidebar-right">
+            <div class="sidebar-title">Curiosity Map</div>
+            <canvas class="network-canvas" id="network-canvas"></canvas>
+
+            <div class="network-stats">
+                <div class="network-stat">
+                    <span class="network-stat-label">Nodes</span>
+                    <span class="network-stat-value" id="node-count">4</span>
+                </div>
+                <div class="network-stat">
+                    <span class="network-stat-label">Paths</span>
+                    <span class="network-stat-value" id="connection-count">4</span>
+                </div>
+                <div class="network-stat">
+                    <span class="network-stat-label">Shifts</span>
+                    <span class="network-stat-value" id="mutation-count">0</span>
+                </div>
+            </div>
+
+            <div class="genome-stats">
+                <div class="sidebar-title" style="margin-top: 16px;">Your Curiosity Style</div>
+                <div class="genome-dimension">
+                    <div class="genome-dimension-label">
+                        <span>Depth vs Breadth</span>
+                        <span id="depth-breadth-val">0.50</span>
+                    </div>
+                    <div class="genome-dimension-bar">
+                        <div class="genome-dimension-fill" id="depth-breadth-bar" style="width: 50%"></div>
+                    </div>
+                </div>
+                <div class="genome-dimension">
+                    <div class="genome-dimension-label">
+                        <span>Abstract vs Concrete</span>
+                        <span id="abstract-concrete-val">0.50</span>
+                    </div>
+                    <div class="genome-dimension-bar">
+                        <div class="genome-dimension-fill" id="abstract-concrete-bar" style="width: 50%"></div>
+                    </div>
+                </div>
+                <div class="genome-dimension">
+                    <div class="genome-dimension-label">
+                        <span>Why vs How</span>
+                        <span id="why-how-val">0.50</span>
+                    </div>
+                    <div class="genome-dimension-bar">
+                        <div class="genome-dimension-fill" id="why-how-bar" style="width: 50%"></div>
+                    </div>
+                </div>
+                <div class="genome-dimension">
+                    <div class="genome-dimension-label">
+                        <span>Wanderlust</span>
+                        <span id="exploration-val">0.50</span>
+                    </div>
+                    <div class="genome-dimension-bar">
+                        <div class="genome-dimension-fill exploration" id="exploration-bar" style="width: 50%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="sidebar-title">Settings</div>
+                <div class="setting-row">
+                    <span class="setting-label">Questions per step</span>
+                    <input type="range" id="num-questions" min="3" max="7" value="5">
+                    <span class="setting-value" id="num-questions-val">5</span>
+                </div>
+                <div class="setting-row">
+                    <span class="setting-label">Network mutation rate</span>
+                    <input type="range" id="mutation-rate" min="0" max="1" step="0.1" value="0.3">
+                    <span class="setting-value" id="mutation-rate-val">0.3</span>
+                </div>
+                <div class="setting-row">
+                    <span class="setting-label">Novelty threshold</span>
+                    <input type="range" id="novelty-threshold" min="0" max="1" step="0.1" value="0.3">
+                    <span class="setting-value" id="novelty-threshold-val">0.3</span>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
