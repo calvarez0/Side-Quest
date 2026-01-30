@@ -9,8 +9,8 @@
     --bg-deep: #dfd4c2;
     --border-color: #d0c4a8;
     --border-hover: #b8a880;
-    --text-primary: #2e2418;
-    --text-secondary: #4a3c28;
+    --text-primary: #000000;
+    --text-secondary: #000000;
     --text-muted: #7a6b50;
     --accent: #6b3a12;
     --accent-light: #8a5020;
@@ -120,36 +120,39 @@ body {
     top: 50%;
     transform: translateY(-50%);
     z-index: 100;
-    width: 28px;
-    height: 56px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--bg-deep);
+    border: 1px solid var(--border-hover);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
     font-family: 'Cinzel', serif;
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 700;
+    letter-spacing: 0.05em;
     color: var(--text-muted);
     transition: var(--transition);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 14px 6px;
 }
 
 .sidebar-toggle:hover {
-    background: var(--bg-deep);
-    color: var(--accent);
-    border-color: var(--border-hover);
+    background: var(--border-hover);
+    color: #000;
+    border-color: var(--accent);
 }
 
 .sidebar-toggle-left {
     left: 0;
-    border-radius: 0 6px 6px 0;
+    border-radius: 0 8px 8px 0;
     border-left: none;
 }
 
 .sidebar-toggle-right {
     right: 0;
-    border-radius: 6px 0 0 6px;
+    border-radius: 8px 0 0 8px;
     border-right: none;
 }
 
@@ -473,19 +476,13 @@ body {
     padding: 48px 20px;
 }
 
-.start-emblem {
-    font-size: 42px;
-    color: var(--accent-glow);
-    margin-bottom: 8px;
-}
-
 .start-title {
     font-family: 'Cinzel', serif;
     font-size: 44px;
     font-weight: 700;
     margin-bottom: 12px;
     letter-spacing: 0.06em;
-    color: var(--accent);
+    color: #000;
 }
 
 .start-subtitle {
@@ -526,11 +523,6 @@ body {
     background: var(--bg-deep);
 }
 
-.seed-icon {
-    display: block;
-    font-size: 26px;
-    margin-bottom: 10px;
-}
 
 /* Right Sidebar */
 .sidebar-right {

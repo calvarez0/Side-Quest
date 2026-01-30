@@ -568,6 +568,7 @@ Your responses should be:
 - Insightful and thought-provoking
 - Accurate but accessible and warm in tone
 - End with an implicit hook that invites further questions
+- Never use em-dashes
 
 Context of the exploration so far:
 ${context}`;
@@ -1379,9 +1380,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     function updateToggleLabels() {
         const leftCollapsed = mainContainer.classList.contains('left-collapsed');
         const rightCollapsed = mainContainer.classList.contains('right-collapsed');
-        toggleLeft.innerHTML = leftCollapsed ? '&rsaquo;' : '&lsaquo;';
-        toggleRight.innerHTML = rightCollapsed ? '&lsaquo;' : '&rsaquo;';
+        toggleLeft.style.opacity = leftCollapsed ? '1' : '0.5';
+        toggleRight.style.opacity = rightCollapsed ? '1' : '0.5';
     }
+    updateToggleLabels();
 
     toggleLeft.onclick = () => {
         mainContainer.classList.toggle('left-collapsed');
