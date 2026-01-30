@@ -11,7 +11,10 @@
 </head>
 <body>
     <header class="header">
-        <div class="logo">Side Quest <span>A Curiosity Journey</span></div>
+        <div class="header-left">
+            <button class="sidebar-reopen" id="reopen-left" title="Open Journey Log" style="display:none;">&raquo; Log</button>
+            <div class="logo">Side Quest <span>A Curiosity Journey</span></div>
+        </div>
         <div class="header-stats">
             <div class="stat">
                 <span class="stat-label">Depth</span>
@@ -25,16 +28,17 @@
                 <div class="status-dot" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
             </div>
+            <button class="sidebar-reopen" id="reopen-right" title="Open Curiosity Map" style="display:none;">Map &laquo;</button>
         </div>
     </header>
-
-    <button class="sidebar-toggle sidebar-toggle-left" id="toggle-left" title="Toggle Journey Log">LOG</button>
-    <button class="sidebar-toggle sidebar-toggle-right" id="toggle-right" title="Toggle Curiosity Map">MAP</button>
 
     <div class="main-container" id="main-container">
         <!-- Left Sidebar - Journey Log -->
         <aside class="sidebar-left">
-            <div class="sidebar-title">Journey Log</div>
+            <div class="sidebar-header">
+                <div class="sidebar-title">Journey Log</div>
+                <button class="sidebar-collapse" id="toggle-left" title="Collapse sidebar">&laquo;</button>
+            </div>
             <canvas class="archive-canvas" id="archive-canvas"></canvas>
             <div class="archive-stats">
                 <div class="archive-stat">
@@ -116,7 +120,10 @@
 
         <!-- Right Sidebar - CuriosityNet Visualization -->
         <aside class="sidebar-right">
-            <div class="sidebar-title">Curiosity Map</div>
+            <div class="sidebar-header">
+                <div class="sidebar-title">Curiosity Map</div>
+                <button class="sidebar-collapse" id="toggle-right" title="Collapse sidebar">&raquo;</button>
+            </div>
             <canvas class="network-canvas" id="network-canvas"></canvas>
 
             <div class="network-stats">

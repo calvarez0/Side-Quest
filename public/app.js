@@ -1374,35 +1374,40 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Sidebar toggle logic
     const mainContainer = document.getElementById('main-container');
-    const toggleLeft = document.getElementById('toggle-left');
-    const toggleRight = document.getElementById('toggle-right');
+    const collapseLeft = document.getElementById('toggle-left');
+    const collapseRight = document.getElementById('toggle-right');
+    const reopenLeft = document.getElementById('reopen-left');
+    const reopenRight = document.getElementById('reopen-right');
 
-    function updateToggleLabels() {
+    function updateSidebarState() {
         const leftCollapsed = mainContainer.classList.contains('left-collapsed');
         const rightCollapsed = mainContainer.classList.contains('right-collapsed');
-        toggleLeft.style.opacity = leftCollapsed ? '1' : '0.5';
-        toggleRight.style.opacity = rightCollapsed ? '1' : '0.5';
+        reopenLeft.style.display = leftCollapsed ? 'inline-block' : 'none';
+        reopenRight.style.display = rightCollapsed ? 'inline-block' : 'none';
     }
-    updateToggleLabels();
 
-    toggleLeft.onclick = () => {
+    function toggleLeftSidebar() {
         mainContainer.classList.toggle('left-collapsed');
-        updateToggleLabels();
-        // Redraw canvases after transition completes
+        updateSidebarState();
         setTimeout(() => {
             drawNetworkVisualization();
             drawArchiveVisualization();
         }, 320);
-    };
+    }
 
-    toggleRight.onclick = () => {
+    function toggleRightSidebar() {
         mainContainer.classList.toggle('right-collapsed');
-        updateToggleLabels();
+        updateSidebarState();
         setTimeout(() => {
             drawNetworkVisualization();
             drawArchiveVisualization();
         }, 320);
-    };
+    }
+
+    collapseLeft.onclick = toggleLeftSidebar;
+    reopenLeft.onclick = toggleLeftSidebar;
+    collapseRight.onclick = toggleRightSidebar;
+    reopenRight.onclick = toggleRightSidebar;
 
     drawNetworkVisualization();
     drawArchiveVisualization();

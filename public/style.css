@@ -114,46 +114,64 @@ body {
     grid-template-columns: 0px 1fr 0px;
 }
 
-/* Sidebar Toggle Buttons */
-.sidebar-toggle {
-    position: fixed;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 100;
-    background: var(--bg-deep);
-    border: 1px solid var(--border-hover);
+/* Sidebar Header (title + collapse button row) */
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.sidebar-header .sidebar-title {
+    margin-bottom: 0;
+}
+
+.sidebar-collapse {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
     cursor: pointer;
+    padding: 4px 8px;
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    transition: var(--transition);
+    line-height: 1;
+}
+
+.sidebar-collapse:hover {
+    background: var(--bg-deep);
+    color: #000;
+    border-color: var(--border-hover);
+}
+
+/* Header reopen buttons (shown when sidebar is collapsed) */
+.header-left {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 4px;
+    gap: 12px;
+}
+
+.sidebar-reopen {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 4px 10px;
     font-family: 'Cinzel', serif;
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.05em;
     color: var(--text-muted);
     transition: var(--transition);
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    padding: 14px 6px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
 }
 
-.sidebar-toggle:hover {
-    background: var(--border-hover);
+.sidebar-reopen:hover {
+    background: var(--bg-deep);
     color: #000;
-    border-color: var(--accent);
-}
-
-.sidebar-toggle-left {
-    left: 0;
-    border-radius: 0 8px 8px 0;
-    border-left: none;
-}
-
-.sidebar-toggle-right {
-    right: 0;
-    border-radius: 8px 0 0 8px;
-    border-right: none;
+    border-color: var(--border-hover);
 }
 
 /* Left Sidebar - Journey Log */
@@ -812,8 +830,8 @@ kbd {
         display: none;
     }
 
-    .sidebar-toggle {
-        display: none;
+    .sidebar-reopen {
+        display: none !important;
     }
 
     .seed-options {
