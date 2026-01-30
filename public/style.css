@@ -494,13 +494,19 @@ body {
     padding: 48px 20px;
 }
 
+.start-emblem {
+    font-size: 42px;
+    color: var(--accent-glow);
+    margin-bottom: 8px;
+}
+
 .start-title {
     font-family: 'Cinzel', serif;
     font-size: 44px;
     font-weight: 700;
     margin-bottom: 12px;
     letter-spacing: 0.06em;
-    color: #000;
+    color: var(--accent);
 }
 
 .start-subtitle {
