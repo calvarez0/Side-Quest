@@ -568,7 +568,7 @@ Your responses should be:
 - Insightful and thought-provoking
 - Accurate but accessible and warm in tone
 - End with an implicit hook that invites further questions
-- Never use em-dashes
+- NEVER use em-dashes
 
 Context of the exploration so far:
 ${context}`;
@@ -635,6 +635,7 @@ Your responses should be:
 - Insightful and thought-provoking
 - Accurate but accessible and warm in tone
 - End with an implicit hook that invites further questions
+- NEVER use em-dashes
 
 Context of the exploration so far:
 ${context}`;
