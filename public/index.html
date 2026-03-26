@@ -6,7 +6,7 @@
     <title>Side Quest - A Curiosity Journey</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..800,0..100&family=Nunito+Sans:opsz,wght@6..12,400..800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -64,19 +64,12 @@
             <div class="content-wrapper" id="content-area">
                 <!-- Start Screen -->
                 <div class="start-screen" id="start-screen">
-                    <div class="start-emblem">&#9733;</div>
-                    <h1 class="start-title">Side Quest</h1>
-                    <p class="start-subtitle">
-                        Choose a path below and let your curiosity lead the way.
-                    </p>
+                    <h1 class="start-title" id="start-title">Where do you want to go?</h1>
+                    <p class="start-subtitle">Pick one question to begin.</p>
                     <div class="seed-options" id="seed-options">
-                        <div class="seed-option" data-seed="Why are pineapples spiky?">Why are pineapples spiky?</div>
-                        <div class="seed-option" data-seed="How do I know I'm really me?">How do I know I'm really me?</div>
-                        <div class="seed-option" data-seed="Where does yesterday go?">Where does yesterday go?</div>
-                        <div class="seed-option" data-seed="Who was the coolest designer?">Who was the coolest designer?</div>
-                        <div class="seed-option" data-seed="Which civilization lasted the longest?">Which civilization lasted the longest?</div>
-                        <div class="seed-option" data-seed="Why does the universe feel personal sometimes?">Why does the universe feel personal sometimes?</div>
+                        <!-- Populated from archive -->
                     </div>
+
                     <div class="custom-question">
                         <input type="text" class="custom-input" id="seed-input"
                                placeholder="Or begin your own quest...">
@@ -90,25 +83,28 @@
                         <div class="context-question" id="current-question"></div>
                         <div class="context-answer" id="current-answer">
                             <button class="heart-btn" id="heart-btn" title="Heart this insight">
-                                <span class="heart-icon">&#9825;</span>
+                                <span class="heart-icon">&#10084;</span>
                             </button>
                             <span id="answer-text"></span>
                         </div>
                     </div>
 
-                    <div class="question-options" id="question-options">
-                        <!-- Generated question options appear here -->
-                    </div>
+                    <section class="question-chamber" id="question-chamber" aria-labelledby="question-chamber-title">
+                        <div class="question-chamber-header">
+                            <h2 class="question-chamber-title" id="question-chamber-title">Choose the next thread</h2>
+                        </div>
 
-                    <div class="custom-question">
+                        <div class="question-options" id="question-options">
+                            <!-- Generated question options appear here -->
+                        </div>
+                    </section>
+
+                    <div class="custom-question" id="explore-custom-question">
                         <input type="text" class="custom-input" id="custom-input"
                                placeholder="Or forge your own path...">
                         <button class="submit-btn" id="custom-submit">Ask</button>
                     </div>
 
-                    <div class="keyboard-hint">
-                        Press <kbd>1</kbd>-<kbd>5</kbd> to choose, <kbd>H</kbd> to heart, <kbd>Enter</kbd> to ask
-                    </div>
                 </div>
 
                 <!-- Loading State -->
@@ -186,8 +182,8 @@
                 <div class="sidebar-title">Settings</div>
                 <div class="setting-row">
                     <span class="setting-label">Questions per step</span>
-                    <input type="range" id="num-questions" min="3" max="7" value="5">
-                    <span class="setting-value" id="num-questions-val">5</span>
+                    <input type="range" id="num-questions" min="6" max="6" value="6">
+                    <span class="setting-value" id="num-questions-val">6</span>
                 </div>
                 <div class="setting-row">
                     <span class="setting-label">Network mutation rate</span>

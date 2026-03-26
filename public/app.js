@@ -6,11 +6,103 @@
 
 const CONFIG = {
     model: 'claude-haiku-4-5-20251001',
-    numQuestions: 5,
+    numQuestions: 6,
     mutationRate: 0.3,
     noveltyThreshold: 0.3,
     responseSentences: 3
 };
+
+const SEED_ARCHIVE_PAGE_SIZE = 6;
+
+const SEED_ARCHIVE_FALLBACK = [
+    'Why are pineapples spiky?',
+    'How do I know I am really me?',
+    'Where does yesterday go?',
+    'Who was the coolest designer?',
+    'Which civilization lasted the longest?',
+    'Why does the universe feel personal sometimes?',
+    'Why do we trust stories more than statistics?',
+    'How does memory decide what to keep?',
+    'Why do old songs feel like time travel?',
+    'Could cities be designed like forests?',
+    'Why do maps change how we think?',
+    'How do rituals shape identity?',
+    'Can boredom be a creative superpower?',
+    'Why are some ideas timeless?',
+    'How do languages change what we notice?',
+    'Could architecture improve mental health?',
+    'Why do symbols feel powerful?',
+    'How does myth survive modern life?',
+    'Can AI make us more human?',
+    'Why does beauty feel objective sometimes?',
+    'How do people invent new genres?',
+    'Can a question be better than an answer?',
+    'Why do we crave mystery?',
+    'How does curiosity spread between people?',
+    'Can technology feel sacred?',
+    'Why are thresholds and doorways so symbolic?',
+    'How do children ask better questions than adults?',
+    'Can design reduce loneliness?',
+    'Why does nostalgia feel warm and painful at once?',
+    'How do communities keep knowledge alive?',
+    'What makes a place feel alive?',
+    'Can ordinary objects become meaningful art?',
+    'Why do we search for meaning in patterns?',
+    'How does humor make difficult truths bearable?',
+    'Can food be a language?',
+    'Why do ideas return in new forms?',
+    'How does music create belonging?',
+    'Can future cities be emotionally intelligent?',
+    'Why do we romanticize the unknown?',
+    'How can we design for wonder, not just efficiency?'
+];
+
+const PROMPTBREEDER_TASK_DESCRIPTION = 'Generate follow-up curiosity questions for Side Quest. Questions should be short, inviting, and exploratory.';
+const PROMPTBREEDER_HYPER_MUTATION_PROMPT = 'Please summarize and improve the following instruction:';
+
+const PROMPTBREEDER_SEED_TASK_PROMPTS = [
+    'Generate follow-up questions that deepen the current idea while staying clear and human.',
+    'Generate six concise follow-up questions that feel curious, vivid, and easy to answer.',
+    'Generate follow-up questions that branch to fresh angles without losing connection to the current answer.',
+    'Generate follow-up questions that balance wonder, clarity, and practical relevance.',
+    'Generate follow-up questions that invite reflection and discovery rather than debate.'
+];
+
+const PROMPTBREEDER_THINKING_STYLES = [
+    'Let\'s think step by step.',
+    'Reframe the problem from a contrasting perspective.',
+    'Seek one unexpected but relevant angle.',
+    'Prioritize clarity over cleverness.',
+    'Start concrete, then open toward abstract insight.',
+    'Use analogies to spark new lines of inquiry.',
+    'Find the hidden assumption and question it.',
+    'Generate ideas that feel both surprising and useful.'
+];
+
+const PROMPTBREEDER_MUTATION_PROMPTS = [
+    'Rewrite this instruction to be more specific and practical while keeping it concise.',
+    'Say that instruction again in another way. Do not copy phrases verbatim.',
+    'Make the instruction more imaginative but still easy to follow.',
+    'Mutate the instruction with an unexpected twist that still serves the task.',
+    'Improve the instruction for clarity, warmth, and actionability.',
+    'Rewrite the instruction so it encourages broader exploration.',
+    'Rewrite the instruction so it encourages deeper reasoning.',
+    'Produce a variant that sounds natural to a curious guide.'
+];
+
+const PROMPTBREEDER_OPERATORS = [
+    'direct_first_order',
+    'direct_zero_order',
+    'eda_population',
+    'eda_ranked',
+    'eda_lineage',
+    'hyper_zero_order',
+    'hyper_first_order',
+    'lamarckian',
+    'crossover_context_shuffle'
+];
+
+const PROMPTBREEDER_HISTORY_LIMIT = 24;
 
 // ============================================
 // MARKDOWN PARSING - Convert Claude's markdown to plain text
@@ -486,6 +578,9 @@ const state = {
     heartedCount: 0,
     trajectory: [],
     currentNode: null,
+    seedArchiveSource: [...SEED_ARCHIVE_FALLBACK],
+    seedArchivePool: [],
+    seedArchiveCursor: 0,
 
     curiosityNet: new CuriosityNet(),
     noveltyArchive: new NoveltyArchive(),
@@ -502,14 +597,610 @@ const state = {
         mechanismDrive: 0.5,
         explorationBonus: 0.5,
         questionLength: -0.3
+    },
+
+    promptEvolution: {
+        generation: 0,
+        activeGenome: null,
+        prefetchedGenome: null,
+        prefetchPromise: null,
+        nextOperator: null,
+        population: [],
+        lineage: [],
+        contextPool: [],
+        mutationPromptPool: [...PROMPTBREEDER_MUTATION_PROMPTS]
     }
 };
+
+let seedIntroCleanupTimer = null;
+let seedIntroRunId = 0;
+
+function playContextQuestionIntro(questionText) {
+    const questionEl = document.getElementById('current-question');
+    if (!questionEl) return;
+
+    questionEl.classList.remove('magic-intro');
+    questionEl.textContent = questionText;
+    void questionEl.offsetWidth;
+    questionEl.classList.add('magic-intro');
+}
+
+function stopContextQuestionIntro() {
+    const questionEl = document.getElementById('current-question');
+    if (!questionEl) return;
+    questionEl.classList.remove('magic-intro');
+}
+
+function prepareAnswerReveal() {
+    const answerEl = document.getElementById('answer-text');
+    const answerContainer = document.getElementById('current-answer');
+
+    if (answerEl) {
+        answerEl.classList.remove('answer-reveal');
+        answerEl.textContent = '';
+    }
+
+    if (answerContainer) {
+        answerContainer.classList.add('answer-hidden');
+        answerContainer.classList.add('answer-loading');
+    }
+}
+
+function revealAnswerText(answerText) {
+    const answerEl = document.getElementById('answer-text');
+    const answerContainer = document.getElementById('current-answer');
+    if (!answerEl) return;
+
+    answerEl.textContent = answerText;
+    requestAnimationFrame(() => {
+        stopContextQuestionIntro();
+        if (answerContainer) {
+            answerContainer.classList.remove('answer-hidden');
+            answerContainer.classList.remove('answer-loading');
+        }
+        answerEl.classList.remove('answer-reveal');
+        void answerEl.offsetWidth;
+        answerEl.classList.add('answer-reveal');
+    });
+}
+
+function setFollowUpAreaVisible(visible) {
+    const chamber = document.getElementById('question-chamber');
+    const custom = document.getElementById('explore-custom-question');
+
+    if (chamber) {
+        chamber.style.display = visible ? '' : 'none';
+    }
+
+    if (custom) {
+        custom.style.display = visible ? 'flex' : 'none';
+    }
+}
+
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function chooseRandom(items) {
+    if (!Array.isArray(items) || items.length === 0) return null;
+    return items[Math.floor(Math.random() * items.length)];
+}
+
+function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+}
+
+function normalizeInstructionCandidate(text, fallback) {
+    const normalized = parseMarkdown(text || '')
+        .replace(/^[\-\*\d\.\)\s]+/, '')
+        .replace(/^(instruction mutant|instruction|mutation prompt)\s*[:\-]\s*/i, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^["'`]+|["'`]+$/g, '');
+
+    if (!normalized) return fallback;
+    return normalized.slice(0, 420);
+}
+
+function buildPromptGenome({
+    taskPrompt,
+    mutationPrompt,
+    operator,
+    parentGenome = null,
+    contextExamples = null
+}) {
+    const safeTaskPrompt = normalizeInstructionCandidate(taskPrompt, chooseRandom(PROMPTBREEDER_SEED_TASK_PROMPTS));
+    const safeMutationPrompt = normalizeInstructionCandidate(
+        mutationPrompt,
+        chooseRandom(PROMPTBREEDER_MUTATION_PROMPTS)
+    );
+
+    const lineage = parentGenome?.lineage
+        ? [...parentGenome.lineage.slice(-5), safeTaskPrompt]
+        : [safeTaskPrompt];
+
+    return {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        taskPrompt: safeTaskPrompt,
+        mutationPrompt: safeMutationPrompt,
+        operator,
+        createdAt: Date.now(),
+        lineage,
+        contextExamples: Array.isArray(contextExamples)
+            ? contextExamples.slice(0, 3)
+            : (parentGenome?.contextExamples || []).slice(0, 3),
+        lastFitness: parentGenome?.lastFitness ?? 0.5
+    };
+}
+
+function initializePromptEvolution() {
+    if (state.promptEvolution.activeGenome) {
+        return state.promptEvolution.activeGenome;
+    }
+
+    const seedGenome = buildPromptGenome({
+        taskPrompt: chooseRandom(PROMPTBREEDER_SEED_TASK_PROMPTS),
+        mutationPrompt: chooseRandom(PROMPTBREEDER_MUTATION_PROMPTS),
+        operator: 'seed_init'
+    });
+
+    state.promptEvolution.activeGenome = seedGenome;
+    state.promptEvolution.lineage = [...seedGenome.lineage];
+    state.promptEvolution.population = [{
+        taskPrompt: seedGenome.taskPrompt,
+        mutationPrompt: seedGenome.mutationPrompt,
+        fitness: 0.5,
+        createdAt: seedGenome.createdAt
+    }];
+
+    return seedGenome;
+}
+
+function computePromptFitnessProxy(questions) {
+    const novelty = clamp01(state.currentNovelty || 0);
+    const surprise = clamp01(state.currentSurprise || 0);
+    const exploration = clamp01((state.curiosityOutput?.explorationBonus || 0.5));
+    const coverage = clamp01((questions?.length || 0) / CONFIG.numQuestions);
+
+    const averageLength = (questions || []).reduce((sum, q) => sum + q.split(/\s+/).length, 0) / Math.max(questions?.length || 1, 1);
+    const lengthScore = clamp01(1 - Math.abs(averageLength - 8) / 12);
+
+    return clamp01(
+        0.18 +
+        0.30 * novelty +
+        0.22 * surprise +
+        0.18 * exploration +
+        0.08 * coverage +
+        0.04 * lengthScore
+    );
+}
+
+function recordPromptOutcome(genome, fitness, currentAnswer) {
+    if (!genome) return;
+
+    genome.lastFitness = fitness;
+    state.promptEvolution.activeGenome = genome;
+
+    state.promptEvolution.population.push({
+        taskPrompt: genome.taskPrompt,
+        mutationPrompt: genome.mutationPrompt,
+        fitness,
+        createdAt: Date.now()
+    });
+
+    state.promptEvolution.population.sort((a, b) => b.fitness - a.fitness);
+    if (state.promptEvolution.population.length > PROMPTBREEDER_HISTORY_LIMIT) {
+        state.promptEvolution.population = state.promptEvolution.population.slice(0, PROMPTBREEDER_HISTORY_LIMIT);
+    }
+
+    state.promptEvolution.lineage = [...(genome.lineage || [genome.taskPrompt])].slice(-8);
+
+    if (genome.mutationPrompt && !state.promptEvolution.mutationPromptPool.includes(genome.mutationPrompt)) {
+        state.promptEvolution.mutationPromptPool.push(genome.mutationPrompt);
+        if (state.promptEvolution.mutationPromptPool.length > 40) {
+            state.promptEvolution.mutationPromptPool = state.promptEvolution.mutationPromptPool.slice(-40);
+        }
+    }
+
+    if (typeof currentAnswer === 'string' && currentAnswer.trim().length > 0) {
+        state.promptEvolution.contextPool.push(currentAnswer.trim());
+        if (state.promptEvolution.contextPool.length > 14) {
+            state.promptEvolution.contextPool = state.promptEvolution.contextPool.slice(-14);
+        }
+    }
+}
+
+function weightedPickPopulationMember(population, excludeTaskPrompt = null) {
+    const filtered = population.filter(p => p.taskPrompt !== excludeTaskPrompt);
+    if (filtered.length === 0) return null;
+
+    const totalWeight = filtered.reduce((sum, item) => sum + Math.max(0.01, item.fitness || 0), 0);
+    let threshold = Math.random() * totalWeight;
+
+    for (const item of filtered) {
+        threshold -= Math.max(0.01, item.fitness || 0);
+        if (threshold <= 0) {
+            return item;
+        }
+    }
+
+    return filtered[filtered.length - 1];
+}
+
+async function callPromptMutationModel(userPrompt, fallback = '') {
+    if (!state.connected) {
+        return fallback;
+    }
+
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: CONFIG.model,
+                max_tokens: 320,
+                messages: [{ role: 'user', content: userPrompt }]
+            })
+        });
+
+        if (!response.ok) {
+            return fallback;
+        }
+
+        const data = await response.json();
+        const raw = data.content?.[0]?.text?.trim() || fallback;
+        return normalizeInstructionCandidate(raw, fallback);
+    } catch (error) {
+        console.warn('Prompt mutation call failed:', error);
+        return fallback;
+    }
+}
+
+function fallbackGenomeMutation(parentGenome, operator) {
+    const fallbackTaskPrompt = normalizeInstructionCandidate(
+        `${parentGenome.taskPrompt} Focus on novelty and clear wording.`,
+        parentGenome.taskPrompt
+    );
+
+    return buildPromptGenome({
+        taskPrompt: fallbackTaskPrompt,
+        mutationPrompt: parentGenome.mutationPrompt,
+        operator,
+        parentGenome
+    });
+}
+
+async function mutateDirectFirstOrder(parentGenome) {
+    const userPrompt = `${parentGenome.mutationPrompt}
+
+INSTRUCTION: ${parentGenome.taskPrompt}
+INSTRUCTION MUTANT:`;
+
+    const taskPrompt = await callPromptMutationModel(userPrompt, parentGenome.taskPrompt);
+    return buildPromptGenome({
+        taskPrompt,
+        mutationPrompt: parentGenome.mutationPrompt,
+        operator: 'direct_first_order',
+        parentGenome
+    });
+}
+
+async function mutateDirectZeroOrder(parentGenome) {
+    const thinkingStyle = chooseRandom(PROMPTBREEDER_THINKING_STYLES) || '';
+    const userPrompt = `${PROMPTBREEDER_TASK_DESCRIPTION}
+Thinking style: ${thinkingStyle}
+A list of 100 hints:
+1.`;
+
+    const taskPrompt = await callPromptMutationModel(userPrompt, parentGenome.taskPrompt);
+    return buildPromptGenome({
+        taskPrompt,
+        mutationPrompt: chooseRandom(state.promptEvolution.mutationPromptPool) || parentGenome.mutationPrompt,
+        operator: 'direct_zero_order',
+        parentGenome
+    });
+}
+
+async function mutateEDAPopulation(parentGenome) {
+    const population = shuffleArray(state.promptEvolution.population.map(p => p.taskPrompt)).slice(0, 8);
+    const promptList = population.map((p, i) => `${i + 1}. ${p}`).join('\n');
+
+    const userPrompt = `You are evolving instruction prompts for this task:
+${PROMPTBREEDER_TASK_DESCRIPTION}
+
+Here is a diverse list of current instructions:
+${promptList}
+
+Continue the list with one NEW instruction that is not a copy:
+${population.length + 1}.`;
+
+    const taskPrompt = await callPromptMutationModel(userPrompt, parentGenome.taskPrompt);
+    return buildPromptGenome({
+        taskPrompt,
+        mutationPrompt: parentGenome.mutationPrompt,
+        operator: 'eda_population',
+        parentGenome
+    });
+}
+
+async function mutateEDARanked(parentGenome) {
+    const ranked = [...state.promptEvolution.population]
+        .sort((a, b) => a.fitness - b.fitness)
+        .slice(0, 8);
+    const rankedList = ranked.map((p, i) => `${i + 1}. ${p.taskPrompt}`).join('\n');
+
+    const userPrompt = `INSTRUCTION: ${parentGenome.mutationPrompt}
+A List of Responses in descending order of score. ${ranked.length + 1} is the best response. It resembles ${ranked.length} more than it does (1).
+${rankedList}
+
+${ranked.length + 1}.`;
+
+    const taskPrompt = await callPromptMutationModel(userPrompt, parentGenome.taskPrompt);
+    return buildPromptGenome({
+        taskPrompt,
+        mutationPrompt: parentGenome.mutationPrompt,
+        operator: 'eda_ranked',
+        parentGenome
+    });
+}
+
+async function mutateLineage(parentGenome) {
+    const lineage = (state.promptEvolution.lineage.length > 0 ? state.promptEvolution.lineage : parentGenome.lineage)
+        .slice(-8);
+    const lineageList = lineage.map((p, i) => `${i + 1}. ${p}`).join('\n');
+
+    const userPrompt = `GENOTYPES FOUND IN ASCENDING ORDER OF QUALITY
+${lineageList}
+
+Generate the next improved instruction:`;
+
+    const taskPrompt = await callPromptMutationModel(userPrompt, parentGenome.taskPrompt);
+    return buildPromptGenome({
+        taskPrompt,
+        mutationPrompt: parentGenome.mutationPrompt,
+        operator: 'eda_lineage',
+        parentGenome
+    });
+}
+
+async function mutateHyperZeroOrder(parentGenome) {
+    const thinkingStyle = chooseRandom(PROMPTBREEDER_THINKING_STYLES) || '';
+    const newMutationPrompt = await callPromptMutationModel(
+        `${PROMPTBREEDER_TASK_DESCRIPTION}
+Thinking style: ${thinkingStyle}
+Generate one mutation instruction that rewrites another instruction to produce better follow-up questions.`,
+        parentGenome.mutationPrompt
+    );
+
+    const taskPrompt = await callPromptMutationModel(
+        `${newMutationPrompt}
+
+INSTRUCTION: ${parentGenome.taskPrompt}
+INSTRUCTION MUTANT:`,
+        parentGenome.taskPrompt
+    );
+
+    return buildPromptGenome({
+        taskPrompt,
+        mutationPrompt: newMutationPrompt,
+        operator: 'hyper_zero_order',
+        parentGenome
+    });
+}
+
+async function mutateHyperFirstOrder(parentGenome) {
+    const improvedMutationPrompt = await callPromptMutationModel(
+        `${PROMPTBREEDER_HYPER_MUTATION_PROMPT}
+${parentGenome.mutationPrompt}
+Improved instruction:`,
+        parentGenome.mutationPrompt
+    );
+
+    const taskPrompt = await callPromptMutationModel(
+        `${improvedMutationPrompt}
+
+INSTRUCTION: ${parentGenome.taskPrompt}
+INSTRUCTION MUTANT:`,
+        parentGenome.taskPrompt
+    );
+
+    return buildPromptGenome({
+        taskPrompt,
+        mutationPrompt: improvedMutationPrompt,
+        operator: 'hyper_first_order',
+        parentGenome
+    });
+}
+
+async function mutateLamarckian(parentGenome, mutationContext) {
+    const workingOut = mutationContext.currentAnswer || chooseRandom(state.promptEvolution.contextPool) || '';
+    if (!workingOut) {
+        return mutateDirectFirstOrder(parentGenome);
+    }
+
+    const userPrompt = `I gave a friend an instruction and some advice. Here are the correct examples of his workings out:
+${workingOut}
+The instruction was:`;
+
+    const taskPrompt = await callPromptMutationModel(userPrompt, parentGenome.taskPrompt);
+    return buildPromptGenome({
+        taskPrompt,
+        mutationPrompt: parentGenome.mutationPrompt,
+        operator: 'lamarckian',
+        parentGenome
+    });
+}
+
+async function mutateCrossoverContextShuffle(parentGenome) {
+    const donor = weightedPickPopulationMember(state.promptEvolution.population, parentGenome.taskPrompt);
+    const donorTaskPrompt = donor?.taskPrompt || chooseRandom(PROMPTBREEDER_SEED_TASK_PROMPTS) || parentGenome.taskPrompt;
+
+    const blendedTaskPrompt = await callPromptMutationModel(
+        `Combine the strengths of these two instruction prompts into one concise improved instruction.
+
+Parent instruction:
+${parentGenome.taskPrompt}
+
+Donor instruction:
+${donorTaskPrompt}
+
+Improved instruction:`,
+        parentGenome.taskPrompt
+    );
+
+    const shuffledContexts = shuffleArray(state.promptEvolution.contextPool).slice(0, 3);
+    return buildPromptGenome({
+        taskPrompt: blendedTaskPrompt,
+        mutationPrompt: parentGenome.mutationPrompt,
+        operator: 'crossover_context_shuffle',
+        parentGenome,
+        contextExamples: shuffledContexts
+    });
+}
+
+async function applyPromptMutationOperator(operator, parentGenome, mutationContext) {
+    try {
+        switch (operator) {
+            case 'direct_first_order':
+                return await mutateDirectFirstOrder(parentGenome);
+            case 'direct_zero_order':
+                return await mutateDirectZeroOrder(parentGenome);
+            case 'eda_population':
+                return await mutateEDAPopulation(parentGenome);
+            case 'eda_ranked':
+                return await mutateEDARanked(parentGenome);
+            case 'eda_lineage':
+                return await mutateLineage(parentGenome);
+            case 'hyper_zero_order':
+                return await mutateHyperZeroOrder(parentGenome);
+            case 'hyper_first_order':
+                return await mutateHyperFirstOrder(parentGenome);
+            case 'lamarckian':
+                return await mutateLamarckian(parentGenome, mutationContext);
+            case 'crossover_context_shuffle':
+                return await mutateCrossoverContextShuffle(parentGenome);
+            default:
+                return await mutateDirectFirstOrder(parentGenome);
+        }
+    } catch (error) {
+        console.warn(`Mutation operator "${operator}" failed:`, error);
+        return fallbackGenomeMutation(parentGenome, operator);
+    }
+}
+
+function schedulePromptMutationPrefetch(mutationContext, parentGenomeOverride = null) {
+    initializePromptEvolution();
+
+    if (state.promptEvolution.prefetchPromise) {
+        return state.promptEvolution.prefetchPromise;
+    }
+
+    const parentGenome = parentGenomeOverride || state.promptEvolution.activeGenome;
+    if (!parentGenome) return null;
+
+    const selectedOperator = chooseRandom(PROMPTBREEDER_OPERATORS) || 'direct_first_order';
+    state.promptEvolution.nextOperator = selectedOperator;
+
+    state.promptEvolution.prefetchPromise = (async () => {
+        const mutatedGenome = await applyPromptMutationOperator(selectedOperator, parentGenome, mutationContext);
+        state.promptEvolution.prefetchedGenome = mutatedGenome;
+        state.promptEvolution.prefetchPromise = null;
+        return mutatedGenome;
+    })().catch((error) => {
+        console.warn('Prefetch mutation failed:', error);
+        state.promptEvolution.prefetchedGenome = fallbackGenomeMutation(parentGenome, selectedOperator);
+        state.promptEvolution.prefetchPromise = null;
+        return state.promptEvolution.prefetchedGenome;
+    });
+
+    return state.promptEvolution.prefetchPromise;
+}
+
+function consumePromptGenomeForGeneration(mutationContext) {
+    initializePromptEvolution();
+
+    const readyGenome = state.promptEvolution.prefetchedGenome || state.promptEvolution.activeGenome;
+    state.promptEvolution.prefetchedGenome = null;
+    state.promptEvolution.activeGenome = readyGenome;
+    state.promptEvolution.generation += 1;
+
+    // Precompute the next generation's mutation in the background.
+    schedulePromptMutationPrefetch(mutationContext, readyGenome);
+
+    return readyGenome;
+}
+
+function ensurePromptMutationPipeline(mutationContext = { currentQuestion: '', currentAnswer: '', styleGuidance: '' }) {
+    initializePromptEvolution();
+    if (!state.connected) return;
+    if (state.promptEvolution.prefetchedGenome || state.promptEvolution.prefetchPromise) return;
+    schedulePromptMutationPrefetch(mutationContext, state.promptEvolution.activeGenome);
+}
+
+function composeFollowUpGenerationPrompt({
+    genome,
+    currentQuestion,
+    currentAnswer,
+    styleGuidance,
+    targetWords
+}) {
+    const contextExamples = (genome.contextExamples || [])
+        .slice(0, 2)
+        .map((example, idx) => `Example ${idx + 1} successful working style:\n${example}`)
+        .join('\n\n');
+
+    const optionalExamples = contextExamples
+        ? `\n\nReference examples from successful prior outputs:\n${contextExamples}\n`
+        : '';
+
+    return `${genome.taskPrompt}
+
+Current Q&A:
+Q: "${currentQuestion}"
+A: "${currentAnswer}"
+${optionalExamples}
+Generate ${CONFIG.numQuestions} follow-up questions.
+Each question must stay around ${targetWords} words and include a question mark.
+Keep questions diverse and avoid repeating wording from each other.
+
+Style guidance:
+${styleGuidance}
+
+Format: return exactly ${CONFIG.numQuestions} numbered lines (1., 2., ...).`;
+}
+
+async function readApiErrorMessage(response, fallback, maxLength = 160) {
+    let raw = '';
+    try {
+        raw = await response.text();
+    } catch (error) {
+        return fallback;
+    }
+
+    if (!raw) {
+        return fallback;
+    }
+
+    try {
+        const parsed = JSON.parse(raw);
+        const msg = parsed?.error?.message || parsed?.message;
+        if (msg && typeof msg === 'string') {
+            return msg.slice(0, maxLength);
+        }
+    } catch (error) {
+        // Non-JSON body; fall back to raw snippet.
+    }
+
+    return raw.slice(0, maxLength);
+}
 
 // ============================================
 // API CALLS (via Vercel serverless functions)
 // ============================================
 
 async function checkConnection() {
+    initializePromptEvolution();
+
     try {
         const response = await fetch('/api/chat', {
             method: 'POST',
@@ -524,16 +1215,18 @@ async function checkConnection() {
         if (response.ok) {
             state.connected = true;
             updateConnectionStatus(true);
+            ensurePromptMutationPipeline();
             return true;
         } else if (response.status === 429) {
             state.connected = true;
             updateConnectionStatus(true, 'Rate limited - wait a moment');
+            ensurePromptMutationPipeline();
             return true;
         } else {
-            const error = await response.json();
-            console.error('API error:', error);
+            const message = await readApiErrorMessage(response, `HTTP ${response.status}`, 140);
+            console.error('API error:', message);
             state.connected = false;
-            updateConnectionStatus(false, error.error?.message || 'API Error');
+            updateConnectionStatus(false, message || 'API Error');
             return false;
         }
     } catch (e) {
@@ -555,6 +1248,135 @@ function updateConnectionStatus(connected, statusMsg = '') {
         dot.classList.remove('connected');
         text.textContent = statusMsg || 'Disconnected';
     }
+}
+
+function shuffleArray(items) {
+    const arr = [...items];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+async function loadSeedArchive() {
+    try {
+        const response = await fetch('/seed-archive.json', { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (!Array.isArray(payload)) {
+            throw new Error('Archive payload was not an array');
+        }
+
+        const normalized = payload
+            .map(item => typeof item === 'string' ? item.trim() : '')
+            .filter(item => item.length > 0);
+
+        if (normalized.length > 0) {
+            state.seedArchiveSource = normalized;
+        }
+    } catch (error) {
+        console.warn('Using fallback archive list:', error);
+        state.seedArchiveSource = [...SEED_ARCHIVE_FALLBACK];
+    }
+
+    state.seedArchivePool = shuffleArray(state.seedArchiveSource);
+    state.seedArchiveCursor = 0;
+}
+
+function takeSeedArchiveBatch() {
+    const source = state.seedArchiveSource.length > 0
+        ? state.seedArchiveSource
+        : SEED_ARCHIVE_FALLBACK;
+
+    if (source.length <= SEED_ARCHIVE_PAGE_SIZE) {
+        return [...source];
+    }
+
+    if (state.seedArchivePool.length === 0 || state.seedArchiveCursor >= state.seedArchivePool.length) {
+        state.seedArchivePool = shuffleArray(source);
+        state.seedArchiveCursor = 0;
+    }
+
+    const batch = [];
+    while (batch.length < SEED_ARCHIVE_PAGE_SIZE) {
+        if (state.seedArchiveCursor >= state.seedArchivePool.length) {
+            state.seedArchivePool = shuffleArray(source);
+            state.seedArchiveCursor = 0;
+        }
+        batch.push(state.seedArchivePool[state.seedArchiveCursor]);
+        state.seedArchiveCursor += 1;
+    }
+
+    return batch;
+}
+
+function renderSeedArchiveBatch() {
+    const container = document.getElementById('seed-options');
+    if (!container) return;
+
+    const batch = takeSeedArchiveBatch();
+    container.innerHTML = '';
+
+    batch.forEach((seed, index) => {
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = 'seed-option';
+        option.dataset.seed = seed;
+        option.textContent = seed;
+        option.classList.add('reveal-card');
+        option.style.setProperty('--reveal-delay', `${index * 70}ms`);
+        container.appendChild(option);
+    });
+}
+
+async function presentSeedArchiveWithIntro(archiveLoadPromise = null) {
+    const runId = ++seedIntroRunId;
+    const title = document.getElementById('start-title');
+    const container = document.getElementById('seed-options');
+
+    if (!container) {
+        renderSeedArchiveBatch();
+        return;
+    }
+
+    if (seedIntroCleanupTimer) {
+        clearTimeout(seedIntroCleanupTimer);
+    }
+
+    container.classList.remove('is-visible');
+    container.classList.add('is-staged');
+    container.innerHTML = '';
+
+    if (title) {
+        title.classList.remove('magic-intro');
+        void title.offsetWidth;
+        title.classList.add('magic-intro');
+    }
+
+    const revealDelayPromise = wait(60);
+    const dataReadyPromise = archiveLoadPromise || Promise.resolve();
+    await Promise.all([revealDelayPromise, dataReadyPromise]);
+
+    if (runId !== seedIntroRunId) return;
+
+    renderSeedArchiveBatch();
+    container.classList.remove('is-staged');
+    container.classList.add('is-visible');
+
+    seedIntroCleanupTimer = setTimeout(() => {
+        if (title && runId === seedIntroRunId) {
+            title.classList.remove('magic-intro');
+        }
+    }, 900);
+}
+
+function hideAnswerAndFollowUps() {
+    prepareAnswerReveal();
+    setFollowUpAreaVisible(false);
 }
 
 async function generateResponseStreaming(prompt, context = '', onChunk) {
@@ -652,8 +1474,8 @@ ${context}`;
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Generation failed: ${error.error?.message || 'Unknown error'}`);
+        const errorMessage = await readApiErrorMessage(response, `HTTP ${response.status}`, 180);
+        throw new Error(`Generation failed: ${errorMessage}`);
     }
 
     const data = await response.json();
@@ -725,20 +1547,21 @@ async function generateQuestionsWithCuriosity(currentQuestion, currentAnswer, tr
         styleGuidance += `- Avoid: ${recentTopics}\n`;
     }
 
-    const prompt = `Based on this Q&A:
+    const mutationContext = {
+        currentQuestion,
+        currentAnswer,
+        styleGuidance,
+        targetWords
+    };
 
-Q: "${currentQuestion}"
-A: "${currentAnswer}"
-
-Generate ${CONFIG.numQuestions} follow-up questions.
-
-CRITICAL: Each question must be SHORT (around ${targetWords} words). Write like a curious person, not an academic.
-
-Style:
-${styleGuidance}
-Format: Number each question (1., 2., etc.), one per line.
-
-Generate ${CONFIG.numQuestions} short questions:`;
+    const genome = consumePromptGenomeForGeneration(mutationContext);
+    const prompt = composeFollowUpGenerationPrompt({
+        genome,
+        currentQuestion,
+        currentAnswer,
+        styleGuidance,
+        targetWords
+    });
 
     try {
         const response = await fetch('/api/chat', {
@@ -756,15 +1579,31 @@ Generate ${CONFIG.numQuestions} short questions:`;
         }
 
         const data = await response.json();
-        const responseText = data.content?.[0]?.text || '';
-
+        const responseText = parseMarkdown(data.content?.[0]?.text || '');
         const lines = responseText.trim().split('\n');
         const questions = [];
 
         for (const line of lines) {
-            const cleaned = line.replace(/^\*?\*?\d+[\.\)]\s*\*?\*?/, '').replace(/\*\*/g, '').trim();
-            if (cleaned.length > 10 && cleaned.includes('?')) {
+            const cleaned = line
+                .replace(/^\s*[\-\*\u2022]?\s*\d*[\.\)]?\s*/, '')
+                .replace(/\*\*/g, '')
+                .trim();
+            if (cleaned.length > 8 && cleaned.includes('?')) {
                 questions.push(cleaned);
+            }
+        }
+
+        if (questions.length < CONFIG.numQuestions) {
+            const sentenceSplits = responseText
+                .split(/\?(?:\s+|$)/)
+                .map(fragment => fragment.trim())
+                .filter(Boolean);
+            for (const fragment of sentenceSplits) {
+                if (questions.length >= CONFIG.numQuestions) break;
+                const candidate = `${fragment.replace(/^[\-\*\d\.\)\s]+/, '').trim()}?`;
+                if (candidate.length > 8 && !questions.includes(candidate)) {
+                    questions.push(candidate);
+                }
             }
         }
 
@@ -772,11 +1611,18 @@ Generate ${CONFIG.numQuestions} short questions:`;
             questions.push(`What else would you like to know about ${currentQuestion.split(' ').slice(0, 4).join(' ')}...?`);
         }
 
-        return questions.slice(0, CONFIG.numQuestions);
+        const finalQuestions = questions.slice(0, CONFIG.numQuestions);
+        const fitness = computePromptFitnessProxy(finalQuestions);
+        recordPromptOutcome(genome, fitness, currentAnswer);
+        return finalQuestions;
 
     } catch (error) {
         console.error('Question generation error:', error);
-        return Array(CONFIG.numQuestions).fill(`What else would you like to explore about ${currentQuestion.split(' ').slice(0, 4).join(' ')}...?`);
+        const fallbackQuestions = Array(CONFIG.numQuestions).fill(
+            `What else would you like to explore about ${currentQuestion.split(' ').slice(0, 4).join(' ')}...?`
+        );
+        recordPromptOutcome(genome, 0.25, currentAnswer);
+        return fallbackQuestions;
     }
 }
 
@@ -1048,20 +1894,20 @@ async function startExploration(seedQuestion) {
     document.getElementById('exploration-view').style.display = 'block';
     document.getElementById('loading').style.display = 'none';
 
-    document.getElementById('current-question').textContent = seedQuestion;
-    document.getElementById('answer-text').textContent = '';
-    document.getElementById('question-options').innerHTML = '<div class="loading-questions">Searching for wisdom...</div>';
+    playContextQuestionIntro(seedQuestion);
+    hideAnswerAndFollowUps();
+    document.getElementById('question-options').innerHTML = '';
 
     try {
         state.predictionModel.predict(seedQuestion);
+        ensurePromptMutationPipeline({ currentQuestion: seedQuestion, currentAnswer: '', styleGuidance: '' });
 
-        const answer = await generateResponseStreaming(
+        const answer = await generateResponse(
             `Question: ${seedQuestion}\n\nProvide a concise, insightful answer:`,
-            '',
-            (partialText) => {
-                document.getElementById('answer-text').textContent = partialText;
-            }
+            ''
         );
+        revealAnswerText(answer);
+        const answerRevealTimestamp = Date.now();
 
         state.currentSurprise = state.predictionModel.learn(seedQuestion, answer);
 
@@ -1086,7 +1932,7 @@ async function startExploration(seedQuestion) {
         state.currentDepth = 0;
 
         const heartBtn = document.getElementById('heart-btn');
-        heartBtn.querySelector('.heart-icon').innerHTML = '&#9825;';
+        heartBtn.querySelector('.heart-icon').innerHTML = '&#10084;';
         heartBtn.classList.remove('active');
 
         updateTrajectoryList();
@@ -1095,10 +1941,14 @@ async function startExploration(seedQuestion) {
         drawNetworkVisualization();
         drawArchiveVisualization();
 
-        document.getElementById('question-options').innerHTML = '<div class="loading-questions">Charting new paths to explore...</div>';
-
         const questions = await generateQuestionsWithCuriosity(seedQuestion, answer, state.trajectory);
+        const readDelay = Math.max(0, 5000 - (Date.now() - answerRevealTimestamp));
+        if (readDelay > 0) {
+            await wait(readDelay);
+        }
+
         displayQuestionOptions(questions);
+        setFollowUpAreaVisible(true);
 
         if (state.curiosityOutput.explorationBonus > 0.5 && Math.random() < CONFIG.mutationRate) {
             state.curiosityNet.mutate();
@@ -1107,6 +1957,7 @@ async function startExploration(seedQuestion) {
 
     } catch (error) {
         console.error('Exploration error:', error);
+        stopContextQuestionIntro();
         alert('Error connecting to API. Please check configuration.\n\nError: ' + error.message);
         document.getElementById('start-screen').style.display = 'block';
         document.getElementById('exploration-view').style.display = 'none';
@@ -1114,9 +1965,9 @@ async function startExploration(seedQuestion) {
 }
 
 async function selectQuestion(question) {
-    document.getElementById('current-question').textContent = question;
-    document.getElementById('answer-text').textContent = '';
-    document.getElementById('question-options').innerHTML = '<div class="loading-questions">Searching for wisdom...</div>';
+    playContextQuestionIntro(question);
+    hideAnswerAndFollowUps();
+    document.getElementById('question-options').innerHTML = '';
 
     try {
         const context = state.trajectory.slice(-3).map(t =>
@@ -1124,14 +1975,14 @@ async function selectQuestion(question) {
         ).join('\n\n');
 
         state.predictionModel.predict(question);
+        ensurePromptMutationPipeline({ currentQuestion: question, currentAnswer: '', styleGuidance: '' });
 
-        const answer = await generateResponseStreaming(
+        const answer = await generateResponse(
             `Question: ${question}\n\nProvide a concise, insightful answer:`,
-            context,
-            (partialText) => {
-                document.getElementById('answer-text').textContent = partialText;
-            }
+            context
         );
+        revealAnswerText(answer);
+        const answerRevealTimestamp = Date.now();
 
         state.currentSurprise = state.predictionModel.learn(question, answer);
 
@@ -1156,7 +2007,7 @@ async function selectQuestion(question) {
         state.totalBranches++;
 
         const heartBtn = document.getElementById('heart-btn');
-        heartBtn.querySelector('.heart-icon').innerHTML = '&#9825;';
+        heartBtn.querySelector('.heart-icon').innerHTML = '&#10084;';
         heartBtn.classList.remove('active');
 
         updateTrajectoryList();
@@ -1164,10 +2015,14 @@ async function selectQuestion(question) {
         updateCuriositySignals();
         drawArchiveVisualization();
 
-        document.getElementById('question-options').innerHTML = '<div class="loading-questions">Charting new paths to explore...</div>';
-
         const questions = await generateQuestionsWithCuriosity(question, answer, state.trajectory);
+        const readDelay = Math.max(0, 5000 - (Date.now() - answerRevealTimestamp));
+        if (readDelay > 0) {
+            await wait(readDelay);
+        }
+
         displayQuestionOptions(questions);
+        setFollowUpAreaVisible(true);
 
         const shouldMutate = (
             state.currentNovelty > 0.5 ||
@@ -1182,6 +2037,7 @@ async function selectQuestion(question) {
 
     } catch (error) {
         console.error('Selection error:', error);
+        stopContextQuestionIntro();
         alert('Error generating response.\n\nError: ' + error.message);
     }
 }
@@ -1190,14 +2046,11 @@ function displayQuestionOptions(questions) {
     const optionsContainer = document.getElementById('question-options');
     optionsContainer.innerHTML = '';
 
-    questions.forEach((q, i) => {
+    questions.forEach((q, index) => {
         const option = document.createElement('div');
         option.className = 'question-option';
-        option.dataset.index = i + 1;
-
-        // Still compute novelty for backend use, but don't show indicator
-        const previewBehavior = state.noveltyArchive.characterize(q, '', '');
-        const noveltyPreview = state.noveltyArchive.calculateNovelty(previewBehavior);
+        option.classList.add('reveal-card');
+        option.style.setProperty('--reveal-delay', `${index * 85}ms`);
 
         option.innerHTML = `
             <span class="question-text">${q}</span>
@@ -1221,7 +2074,7 @@ function toggleHeart() {
     }
 
     const heartBtn = document.getElementById('heart-btn');
-    heartBtn.querySelector('.heart-icon').innerHTML = state.currentNode.hearted ? '&#9829;' : '&#9825;';
+    heartBtn.querySelector('.heart-icon').innerHTML = '&#10084;';
     heartBtn.classList.toggle('active', state.currentNode.hearted);
 
     updateTrajectoryList();
@@ -1250,6 +2103,7 @@ function resetExploration() {
 
     document.getElementById('start-screen').style.display = 'block';
     document.getElementById('exploration-view').style.display = 'none';
+    presentSeedArchiveWithIntro();
 
     updateStats();
     updateTrajectoryList();
@@ -1286,7 +2140,11 @@ function exportJourney() {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await checkConnection();
+    initializePromptEvolution();
+    const connectionCheckPromise = checkConnection();
+    const archiveLoadPromise = loadSeedArchive();
+    presentSeedArchiveWithIntro(archiveLoadPromise);
+    await connectionCheckPromise;
 
     setInterval(async () => {
         if (!state.connected) {
@@ -1294,11 +2152,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }, 30000);
 
-    document.querySelectorAll('.seed-option').forEach(option => {
-        option.onclick = () => {
-            const seed = option.dataset.seed;
+    document.getElementById('seed-options').addEventListener('click', (event) => {
+        const option = event.target.closest('.seed-option');
+        if (!option) return;
+        const seed = option.dataset.seed;
+        if (seed) {
             startExploration(seed);
-        };
+        }
     });
 
     document.getElementById('seed-submit').onclick = () => {
@@ -1360,7 +2220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT') return;
 
-        if (e.key >= '1' && e.key <= '7') {
+        if (e.key >= '1' && e.key <= '6') {
             const index = parseInt(e.key) - 1;
             const options = document.querySelectorAll('.question-option');
             if (options[index]) {
