@@ -614,6 +614,34 @@ const state = {
 
 let seedIntroCleanupTimer = null;
 let seedIntroRunId = 0;
+let questionFitRafId = null;
+let followUpRenderToken = 0;
+
+function fitCurrentQuestionToSingleLine() {
+    const questionEl = document.getElementById('current-question');
+    if (!questionEl || !questionEl.textContent?.trim()) return;
+
+    if (questionFitRafId) {
+        cancelAnimationFrame(questionFitRafId);
+    }
+
+    questionFitRafId = requestAnimationFrame(() => {
+        questionFitRafId = null;
+
+        questionEl.style.fontSize = '';
+        const parentWidth = questionEl.parentElement?.clientWidth || 0;
+        if (parentWidth <= 0) return;
+
+        const maxAllowedWidth = Math.max(160, parentWidth - 4);
+        let currentFontSize = parseFloat(window.getComputedStyle(questionEl).fontSize);
+        const minFontSize = 20;
+
+        while (questionEl.scrollWidth > maxAllowedWidth && currentFontSize > minFontSize) {
+            currentFontSize -= 1;
+            questionEl.style.fontSize = `${currentFontSize}px`;
+        }
+    });
+}
 
 function playContextQuestionIntro(questionText) {
     const questionEl = document.getElementById('current-question');
@@ -621,8 +649,11 @@ function playContextQuestionIntro(questionText) {
 
     questionEl.classList.remove('magic-intro');
     questionEl.textContent = questionText;
+    questionEl.style.fontSize = '';
+    fitCurrentQuestionToSingleLine();
     void questionEl.offsetWidth;
     questionEl.classList.add('magic-intro');
+    fitCurrentQuestionToSingleLine();
 }
 
 function stopContextQuestionIntro() {
@@ -653,27 +684,39 @@ function revealAnswerText(answerText) {
 
     answerEl.textContent = answerText;
     requestAnimationFrame(() => {
-        stopContextQuestionIntro();
         if (answerContainer) {
             answerContainer.classList.remove('answer-hidden');
             answerContainer.classList.remove('answer-loading');
+            answerContainer.classList.remove('answer-enter');
+            void answerContainer.offsetWidth;
+            answerContainer.classList.add('answer-enter');
         }
+        stopContextQuestionIntro();
         answerEl.classList.remove('answer-reveal');
         void answerEl.offsetWidth;
         answerEl.classList.add('answer-reveal');
     });
 }
 
-function setFollowUpAreaVisible(visible) {
+function setContentModeExploring(isExploring) {
+    const contentArea = document.getElementById('content-area');
+    if (!contentArea) return;
+    contentArea.classList.toggle('exploring', isExploring);
+}
+
+function setFollowUpAreaVisible(visible, { loading = false } = {}) {
     const chamber = document.getElementById('question-chamber');
     const custom = document.getElementById('explore-custom-question');
 
     if (chamber) {
-        chamber.style.display = visible ? '' : 'none';
+        chamber.classList.toggle('is-hidden', !visible);
+        chamber.classList.toggle('is-loading', visible && loading);
+        chamber.setAttribute('aria-hidden', visible ? 'false' : 'true');
     }
 
     if (custom) {
-        custom.style.display = visible ? 'flex' : 'none';
+        custom.classList.toggle('is-hidden', !visible || loading);
+        custom.setAttribute('aria-hidden', (!visible || loading) ? 'true' : 'false');
     }
 }
 
@@ -1376,7 +1419,22 @@ async function presentSeedArchiveWithIntro(archiveLoadPromise = null) {
 
 function hideAnswerAndFollowUps() {
     prepareAnswerReveal();
+    followUpRenderToken += 1;
     setFollowUpAreaVisible(false);
+    const optionsContainer = document.getElementById('question-options');
+    if (optionsContainer) {
+        optionsContainer.innerHTML = '';
+    }
+}
+
+function showFollowUpLoadingState() {
+    const optionsContainer = document.getElementById('question-options');
+    if (!optionsContainer) return;
+
+    optionsContainer.innerHTML = `
+        <div class="loading-questions">Gathering your next threads...</div>
+    `;
+    setFollowUpAreaVisible(true, { loading: true });
 }
 
 async function generateResponseStreaming(prompt, context = '', onChunk) {
@@ -1893,6 +1951,7 @@ async function startExploration(seedQuestion) {
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('exploration-view').style.display = 'block';
     document.getElementById('loading').style.display = 'none';
+    setContentModeExploring(true);
 
     playContextQuestionIntro(seedQuestion);
     hideAnswerAndFollowUps();
@@ -1907,6 +1966,7 @@ async function startExploration(seedQuestion) {
             ''
         );
         revealAnswerText(answer);
+        showFollowUpLoadingState();
         const answerRevealTimestamp = Date.now();
 
         state.currentSurprise = state.predictionModel.learn(seedQuestion, answer);
@@ -1947,8 +2007,8 @@ async function startExploration(seedQuestion) {
             await wait(readDelay);
         }
 
-        displayQuestionOptions(questions);
-        setFollowUpAreaVisible(true);
+        setFollowUpAreaVisible(true, { loading: false });
+        await displayQuestionOptions(questions);
 
         if (state.curiosityOutput.explorationBonus > 0.5 && Math.random() < CONFIG.mutationRate) {
             state.curiosityNet.mutate();
@@ -1961,6 +2021,7 @@ async function startExploration(seedQuestion) {
         alert('Error connecting to API. Please check configuration.\n\nError: ' + error.message);
         document.getElementById('start-screen').style.display = 'block';
         document.getElementById('exploration-view').style.display = 'none';
+        setContentModeExploring(false);
     }
 }
 
@@ -1982,6 +2043,7 @@ async function selectQuestion(question) {
             context
         );
         revealAnswerText(answer);
+        showFollowUpLoadingState();
         const answerRevealTimestamp = Date.now();
 
         state.currentSurprise = state.predictionModel.learn(question, answer);
@@ -2021,8 +2083,8 @@ async function selectQuestion(question) {
             await wait(readDelay);
         }
 
-        displayQuestionOptions(questions);
-        setFollowUpAreaVisible(true);
+        setFollowUpAreaVisible(true, { loading: false });
+        await displayQuestionOptions(questions);
 
         const shouldMutate = (
             state.currentNovelty > 0.5 ||
@@ -2045,20 +2107,29 @@ async function selectQuestion(question) {
 function displayQuestionOptions(questions) {
     const optionsContainer = document.getElementById('question-options');
     optionsContainer.innerHTML = '';
+    const renderToken = followUpRenderToken;
 
-    questions.forEach((q, index) => {
-        const option = document.createElement('div');
-        option.className = 'question-option';
-        option.classList.add('reveal-card');
-        option.style.setProperty('--reveal-delay', `${index * 85}ms`);
+    return (async () => {
+        for (let index = 0; index < questions.length; index++) {
+            if (renderToken !== followUpRenderToken) return;
+            const q = questions[index];
+            const option = document.createElement('div');
+            option.className = 'question-option';
+            option.classList.add('reveal-card');
+            option.style.setProperty('--reveal-delay', '0ms');
 
-        option.innerHTML = `
-            <span class="question-text">${q}</span>
-        `;
+            option.innerHTML = `
+                <span class="question-text">${q}</span>
+            `;
 
-        option.onclick = () => selectQuestion(q);
-        optionsContainer.appendChild(option);
-    });
+            option.onclick = () => selectQuestion(q);
+            optionsContainer.appendChild(option);
+
+            if (index < questions.length - 1) {
+                await wait(140);
+            }
+        }
+    })();
 }
 
 function toggleHeart() {
@@ -2103,6 +2174,7 @@ function resetExploration() {
 
     document.getElementById('start-screen').style.display = 'block';
     document.getElementById('exploration-view').style.display = 'none';
+    setContentModeExploring(false);
     presentSeedArchiveWithIntro();
 
     updateStats();
@@ -2278,4 +2350,5 @@ document.addEventListener('DOMContentLoaded', async () => {
 window.addEventListener('resize', () => {
     drawNetworkVisualization();
     drawArchiveVisualization();
+    fitCurrentQuestionToSingleLine();
 });
